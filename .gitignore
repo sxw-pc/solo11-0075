@@ -1,0 +1,29 @@
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.benchmarks/
+.coverage
+htmlcov/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Locally generated fixtures (recreate with fixtures/build_fixtures.py)
+fixtures/generated/*
+!fixtures/generated/.gitkeep
+
+# Reports and audit ledgers
+out/*
+!out/.gitkeep
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
