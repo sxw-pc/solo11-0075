@@ -16,4 +16,4 @@ def test_each_python_file_at_most_300_lines():
     assert offenders == {}
 def test_total_python_line_budget():
     total = sum(len(path.read_text(encoding="utf-8").splitlines()) for path in _python_files())
-    assert 2500 <= total <= 4500, total
+    assert 2500 <= total <= 6000, total

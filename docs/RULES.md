@@ -65,6 +65,23 @@
 | `SPACE_LEDGER_INCONSISTENT` | warning | 页空间账本不一致 | 页头空间分项相加超过可用区 | header_bytes,pointer_bytes,content_bytes,free_bytes,usable_size | 否 | 保留证据并在归档验收单中标注。 |
 | `SPACE_UTILIZATION_LOW` | info | 页利用率过低 | 内容区占比低于阈值且 cell 数达到最小值 | content_bytes,usable_size,ratio,threshold | 否 | 保留证据并在归档验收单中标注。 |
 
+## 跨快照 diff 结论码
+
+`diff` 不新增审计规则，也不改变 `findings` 的级别。它在两份已通过 `verify` 的报告之上输出迁移结论码，便于归档流水线区分“页面重排”和“对象承载变化”：
+
+| 结论码 | 含义 | 退出码 |
+| --- | --- | --- |
+| `no_change` | 完整可比范围内物理页槽与对象均无变化 | 0 |
+| `page_rearrangement` | 对象键保留，但页槽、父页、空间或对象根页/页集合变化 | 1 |
+| `object_membership_changed` | schema 对象按稳定键新增或删除 | 1 |
+| `finding_changes` | 仅 finding 变化，页槽与对象页集合无变化 | 1 |
+| `layout_and_findings` | 页槽/对象布局与 finding 同时变化 | 1 |
+| `mixed` | 对象增删与其他变化同时出现 | 1 |
+| `limited_scope` | 范围受限且未发现可确认变化 | 3 |
+| `refused` | 复核失败、page_size 不一致或对象键冲突 | 2 |
+
+结论码不是损坏判定；`page_rearrangement` 在 VACUUM 或正常重建后同样会出现。
+
 ## 阈值配置
 
 默认值定义在 `src/page_ledger/config.py`，可用 JSON 文件覆盖：

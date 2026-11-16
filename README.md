@@ -88,6 +88,40 @@ python -m page_ledger verify \
 
 通过退出码 0，失败退出码 1。加 `--json` 可输出机器可读的复核结果。
 
+### diff
+
+```bash
+python -m page_ledger diff \
+  --report-a out/before/report.json --db-a fixtures/generated/clean.db \
+  --report-b out/after/report.json  --db-b fixtures/generated/indexed.db \
+  --out out/migration-diff
+```
+
+`diff` 在比较前先用 `verify` 的同一套检查把每侧报告绑定到它的输入字节：报告自摘要、sha256、大小、路径和完整重放都必须通过。任一侧不通过、两侧 `page_size` 不同或同一侧出现重复 schema 对象键时，命令显式拒绝完整比较，不把未知写成无变化。
+
+校验通过后输出两个**不可互相替代**的视角：
+
+- **物理页槽视角**：以 `page_no` 为槽位，比较 `page_type`、`parent_page`、cell/空闲/碎片/页头/指针/保留区字节，以及 B 树、freelist、overflow、orphan 归属；区分保留、变化、释放、分配与未知页。
+- **逻辑对象视角**：以 `(object_type, name, table_name)` 为稳定键，把 `schema.root_walk_pages` 和页账映射到对象，比较根页迁移、页集合、页数、cell 数、深度、空间与归属 finding，并单列无法归属到对象的 finding。
+
+`VACUUM` 把同一表的根页从 8 改到 19 时，物理视角报告旧槽释放、新槽分配和父页变化；对象视角报告同一对象键仍存在但根页和页集合变化。两个表交换等量页段时，按页类型的全局汇总可能无变化，但对象视角会指出两个对象的归属互换。
+
+输出与退出码：
+
+```text
+diff.json                   稳定 JSON，含 integrity.digest
+diff.md                     面向人工复核的迁移差异摘要
+```
+
+| 退出码 | 含义 |
+| --- | --- |
+| 0 | 两侧完整可比且无变化 |
+| 1 | 两侧完整可比且发现变化 |
+| 2 | 拒绝比较（复核失败、page_size 不一致、对象键冲突、输入/输出路径错误） |
+| 3 | 范围受限（任一报告 partial、页记录缺口、对象根页无法映射） |
+
+`status` 为 `complete`、`limited` 或 `refused`；`conclusion` 为 `no_change`、`page_rearrangement`、`object_membership_changed`、`layout_and_findings`、`finding_changes`、`mixed`、`limited_scope` 或 `refused`。受限范围中的未知页既不能当作释放，也不能当作无变化。
+
 ## 输出
 
 每次 `audit` 在输出目录写入：
@@ -165,7 +199,7 @@ HTML 中所有动态文本都经过 HTML 转义，可直接离线打开。
 make test
 ```
 
-测试覆盖头部错误、页分类、内部/叶子页、cell pointer 越界与重叠、B 树环/重复/越界、freelist trunk/leaf、溢出链断/环/重复/长度不匹配、schema 根页与旁证不可用、规则级别与证据、JSON/Markdown/HTML、CLI `audit`/`verify`、只读性、确定性、fixture 可重复生成和单文件行数限制。
+测试覆盖头部错误、页分类、内部/叶子页、cell pointer 越界与重叠、B 树环/重复/越界、freelist trunk/leaf、溢出链断/环/重复/长度不匹配、schema 根页与旁证不可用、规则级别与证据、JSON/Markdown/HTML、CLI `audit`/`verify`/`diff`、跨快照的 VACUUM 根页迁移与页段互换、同快照无变化、对象增删、页大小不一致、partial 侧、报告摘要篡改与输入字节替换、只读性、确定性、fixture 可重复生成和单文件行数限制。
 
 ## 目录结构
 
@@ -182,6 +216,7 @@ page-ledger/
     db/       header.py pages.py btree.py freelist.py overflow.py schema.py
     audit/    model.py ledger.py rules.py engine.py schema_check.py
               report_builder.py verify.py
+              diff.py diff_pages.py diff_objects.py diff_markdown.py
     report/   json_report.py markdown_report.py html_report.py
     store/    audit_store.py
     util/     hashing.py ordering.py
