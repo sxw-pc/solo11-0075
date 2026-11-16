@@ -100,27 +100,18 @@ class AuditEngine:
         records, orphans = self._records(reader, header, walker, overflow, freelist)
         record_map = {item.page_no: item for item in records}
         for page_no in orphans:
-            problems.append(
-                Problem(
-                    "BTREE_UNREACHABLE_PAGE",
-                    page=page_no,
-                    field="page",
-                    expected="可达或位于 freelist",
-                    actual=record_map[page_no].page_type,
-                    evidence="页既不在 B 树/溢出可达图，也不在已发现 freelist 中",
-                )
-            )
+            problems.append(Problem("BTREE_UNREACHABLE_PAGE", page=page_no, field="page", expected="可达或位于 freelist", actual=record_map[page_no].page_type, evidence="页既不在 B 树/溢出可达图，也不在已发现 freelist 中"))
         space_problems, top_pages = space_findings(records, self.config)
         problems.extend(space_problems)
         page_summary = summarize_pages(records)
         reachable = walker.visited | overflow.result.reachable_pages
         out_of_range = sum(1 for problem in problems if problem.code in OUT_OF_RANGE_CODES)
-        bad_pages = {
-            problem.actual
-            for problem in problems
-            if problem.code in OUT_OF_RANGE_CODES and isinstance(problem.actual, int)
-        }
+        bad_pages = {problem.actual for problem in problems if problem.code in OUT_OF_RANGE_CODES and isinstance(problem.actual, int)}
         root_page = walker.pages.get(1)
+        key_order_incomplete = any(
+            item.key_order is not None and item.key_order.applicable and item.key_order.undetermined_count > 0
+            for item in walker.roots
+        )
         partial = bool(
             any(problem.blocking for problem in header.problems)
             or root_page is None
@@ -131,18 +122,10 @@ class AuditEngine:
             or any(not item.complete for item in walker.roots)
             or not freelist.completed
             or any(not chain.complete for chain in overflow.result.chains)
+            or key_order_incomplete
         )
         if partial:
-            problems.append(
-                Problem(
-                    "AUDIT_PARTIAL_RESULT",
-                    field="coverage",
-                    expected="完整页级遍历",
-                    actual="partial",
-                    evidence="头部、根页、freelist、溢出链或遍历限制使审计只覆盖可安全解释的部分",
-                    blocking=True,
-                )
-            )
+            problems.append(Problem("AUDIT_PARTIAL_RESULT", field="coverage", expected="完整页级遍历", actual="partial", evidence="头部、根页、freelist、溢出链或遍历限制使审计只覆盖可安全解释的部分", blocking=True))
         traversal = {
             "root_walks": [item.to_dict() for item in walker.roots],
             "visited_pages": sorted(walker.visited),
@@ -150,15 +133,10 @@ class AuditEngine:
             "schema_record_count": len(walker.schema_records),
             "max_depth": max((item.max_depth for item in walker.roots), default=0),
             "page_type_counts": self._count_types(walker),
+            "key_order": self._key_order_summary(walker),
         }
         freelist_payload = freelist.to_dict()
-        freelist_payload.update(
-            {
-                "trunk_count": len(freelist.trunk_pages),
-                "leaf_count": len(freelist.leaf_pages),
-                "completed": freelist.completed,
-            }
-        )
+        freelist_payload.update({"trunk_count": len(freelist.trunk_pages), "leaf_count": len(freelist.leaf_pages), "completed": freelist.completed})
         file_summary = {
             "file_size": snapshot.size,
             "page_size": header.page_size,
@@ -178,22 +156,7 @@ class AuditEngine:
             "wal_present": header.wal_present,
         }
         schema["root_walk_count"] = len(walker.roots)
-        return build_report(
-            self.config,
-            snapshot,
-            header,
-            problems,
-            [item.to_dict() for item in records],
-            traversal,
-            freelist_payload,
-            overflow_payload(overflow),
-            schema,
-            limitations,
-            partial=partial,
-            page_summary=page_summary,
-            top_pages=top_pages,
-            file_summary=file_summary,
-        )
+        return build_report(self.config, snapshot, header, problems, [item.to_dict() for item in records], traversal, freelist_payload, overflow_payload(overflow), schema, limitations, partial=partial, page_summary=page_summary, top_pages=top_pages, file_summary=file_summary)
     def _schema_without_walk(self, path: str) -> tuple[dict[str, Any], list[Problem]]:
         sidecar = probe_sidecar(path)
         problems: list[Problem] = []
@@ -225,6 +188,13 @@ class AuditEngine:
     def _count_types(self, walker: BtreeWalker) -> dict[str, int]:
         counts = Counter(page.page_type for page in walker.pages.values())
         return {key: counts[key] for key in sorted(counts)}
+    def _key_order_summary(self, walker: BtreeWalker) -> dict[str, Any]:
+        """Aggregate per-root key-order verdicts so reports never imply unproven order."""
+        statuses: dict[str, list[int]] = {}
+        for walk in walker.roots:
+            if walk.key_order is not None:
+                statuses.setdefault(walk.key_order.payload["status"], []).append(walk.root_page)
+        return {"status_counts": {key: len(value) for key, value in sorted(statuses.items())}, "verified_roots": sorted(statuses.get("verified", [])), "violated_roots": sorted(statuses.get("violated", [])), "undetermined_roots": sorted(statuses.get("undetermined", [])), "unverified_index_roots": sorted(statuses.get("not-applicable", [])), "signed_rowids": True, "index_order_checked": False}
     def _conflicts(self, walker, overflow, freelist) -> list[Problem]:
         problems: list[Problem] = []
         reachable = walker.visited | overflow.result.reachable_pages

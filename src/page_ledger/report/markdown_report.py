@@ -19,6 +19,20 @@ def _table(headers: list[str], rows: list[list[Any]]) -> str:
     for row in rows:
         lines.append("| " + " | ".join(_text(item) for item in row) + " |")
     return "\n".join(lines)
+def _key_order_lines(report: dict[str, Any]) -> list[str]:
+    summary = report.get("traversal", {}).get("key_order") or {}
+    lines = [
+        "- 核验对象：普通 rowid table b-tree；rowid 按有符号 64-bit 解释。",
+        f"- 已核验根页：{summary.get('verified_roots', [])}；违约根页：{summary.get('violated_roots', [])}；未判定根页：{summary.get('undetermined_roots', [])}。",
+        "- index b-tree：未核验 SQL 排序（collation/表达式/record 编码），字节序不代表 SQL 顺序。",
+    ]
+    rows = []
+    for item in report.get("traversal", {}).get("root_walks", []):
+        order = item.get("key_order") or {}
+        rows.append([item.get("root_page"), item.get("expected_kind"), "是" if item.get("complete") else "否", order.get("status"), order.get("checked_pages"), order.get("violations"), order.get("undetermined_count")])
+    if rows:
+        lines.append(_table(["根页", "类型", "遍历完整", "键序状态", "已核验页", "违约", "未判定"], rows))
+    return lines
 def render_markdown(report: dict[str, Any]) -> str:
     file_summary = report.get("summary", {}).get("file", {})
     header = report.get("header", {})
@@ -99,46 +113,22 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.extend(["", "## Top 碎片页", ""])
     frag = report.get("summary", {}).get("top_pages", {}).get("fragmentation", [])
     if frag:
-        lines.append(
-            _table(
-                ["页", "类型", "碎片字节", "碎片率", "cell 数"],
-                [[item.get("page_no"), item.get("page_type"), item.get("fragmented_bytes"), item.get("fragmentation_ratio"), item.get("cell_count")] for item in frag],
-            )
-        )
+        lines.append(_table(["页", "类型", "碎片字节", "碎片率", "cell 数"], [[item.get("page_no"), item.get("page_type"), item.get("fragmented_bytes"), item.get("fragmentation_ratio"), item.get("cell_count")] for item in frag]))
     else:
         lines.append("无。")
     lines.extend(["", "## Top 低利用率页", ""])
     low = report.get("summary", {}).get("top_pages", {}).get("low_utilization", [])
     if low:
-        lines.append(
-            _table(
-                ["页", "类型", "利用率", "已用 cell 字节", "空闲字节"],
-                [[item.get("page_no"), item.get("page_type"), item.get("utilization"), item.get("cell_bytes"), item.get("free_bytes")] for item in low],
-            )
-        )
+        lines.append(_table(["页", "类型", "利用率", "已用 cell 字节", "空闲字节"], [[item.get("page_no"), item.get("page_type"), item.get("utilization"), item.get("cell_bytes"), item.get("free_bytes")] for item in low]))
     else:
         lines.append("无。")
+    lines.extend(["", "## 键序核验", ""])
+    lines.extend(_key_order_lines(report))
     lines.extend(["", "## Schema 对账", ""])
     objects = report.get("schema", {}).get("objects", [])
     if objects:
-        lines.append(
-            _table(
-                ["类型", "名称", "根页", "已遍历", "页类型", "页数", "cell 数", "深度"],
-                [
-                    [
-                        item.get("object_type"),
-                        item.get("name"),
-                        item.get("root_page"),
-                        item.get("traversed"),
-                        item.get("page_type"),
-                        item.get("page_count"),
-                        item.get("cell_count"),
-                        item.get("depth"),
-                    ]
-                    for item in objects
-                ],
-            )
-        )
+        rows = [[item.get("object_type"), item.get("name"), item.get("root_page"), item.get("traversed"), item.get("page_type"), item.get("page_count"), item.get("cell_count"), item.get("depth")] for item in objects]
+        lines.append(_table(["类型", "名称", "根页", "已遍历", "页类型", "页数", "cell 数", "深度"], rows))
     else:
         lines.append("没有可核对的表或索引对象。")
     sidecar = report.get("schema", {}).get("sidecar", {})

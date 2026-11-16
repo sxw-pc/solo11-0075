@@ -98,48 +98,12 @@ def verify_report(report_path: str, db_path: str) -> VerifyResult:
         result.valid = False
         return result
     result.replay = replay
-    result.add(
-        "page_size",
-        report.get("header", {}).get("page_size") == replay.get("header", {}).get("page_size"),
-        report.get("header", {}).get("page_size"),
-        replay.get("header", {}).get("page_size"),
-        "页大小与重放一致",
-    )
-    result.add(
-        "core_replay",
-        _core(report) == _core(replay),
-        canonical_digest(_core(report)),
-        canonical_digest(_core(replay)),
-        "报告核心内容与只读重放一致",
-    )
-    result.add(
-        "header_replay",
-        _core(report).get("header") == replay.get("header"),
-        canonical_digest(report.get("header")),
-        canonical_digest(replay.get("header")),
-        "头部解析可复现",
-    )
-    result.add(
-        "page_ledger_replay",
-        _core(report).get("pages") == replay.get("pages"),
-        canonical_digest(report.get("pages")),
-        canonical_digest(replay.get("pages")),
-        "页账可复现",
-    )
-    result.add(
-        "findings_replay",
-        _core(report).get("findings") == replay.get("findings"),
-        canonical_digest(report.get("findings")),
-        canonical_digest(replay.get("findings")),
-        "异常列表可复现",
-    )
-    result.add(
-        "summary_replay",
-        _core(report).get("summary") == replay.get("summary"),
-        canonical_digest(report.get("summary")),
-        canonical_digest(replay.get("summary")),
-        "汇总与 top 页可复现",
-    )
+    result.add("page_size", report.get("header", {}).get("page_size") == replay.get("header", {}).get("page_size"), report.get("header", {}).get("page_size"), replay.get("header", {}).get("page_size"), "页大小与重放一致")
+    result.add("core_replay", _core(report) == _core(replay), canonical_digest(_core(report)), canonical_digest(_core(replay)), "报告核心内容与只读重放一致")
+    result.add("header_replay", _core(report).get("header") == replay.get("header"), canonical_digest(report.get("header")), canonical_digest(replay.get("header")), "头部解析可复现")
+    result.add("page_ledger_replay", _core(report).get("pages") == replay.get("pages"), canonical_digest(report.get("pages")), canonical_digest(replay.get("pages")), "页账可复现")
+    result.add("findings_replay", _core(report).get("findings") == replay.get("findings"), canonical_digest(report.get("findings")), canonical_digest(replay.get("findings")), "异常列表可复现")
+    result.add("summary_replay", _core(report).get("summary") == replay.get("summary"), canonical_digest(report.get("summary")), canonical_digest(replay.get("summary")), "汇总与 top 页可复现")
     replay_sha = replay.get("snapshot", {}).get("sha256")
     result.add("replay_sha256", replay_sha == current_sha, current_sha, replay_sha, "重放快照哈希一致")
     result.valid = all(item["ok"] for item in result.checks)

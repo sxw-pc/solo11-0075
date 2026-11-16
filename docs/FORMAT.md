@@ -102,6 +102,24 @@ varint 最多 9 字节。前 8 字节每字节贡献 7 位，第 9 字节贡献�
 
 table leaf 的 payload 前有两个 varint；不能把第一个 varint 后面的位置直接当成 payload 起点。普通记录的 payload 内容不解码，只计算长度、本地边界和溢出指针。
 
+### 3.3.1 table b-tree 键序核验
+
+工具只读取 rowid（table leaf）与内部分隔键（table interior），不读取业务列值，并按 SQLite 的有符号 64-bit 语义解释（最高位为 1 即负数；仅保留低 64 位）。对每个普通 table B-tree：
+
+- 同一 table leaf 的 rowid 必须严格递增；
+- 同一 table interior 的分隔键必须严格递增；
+- 分隔键 `X` 等于其左子树的最大 rowid；位于 `X` 右侧的子树中所有 rowid 必须严格大于 `X`（右孩子另受祖先上界约束）。
+
+核验需要跨层信息：`parse_cell` 保留 table interior 的 separator，遍历按子树自底向上汇总 `min/max`，再回查父页分区。仅在单页内检查顺序无法发现“页都可达、页类型正确、无环，但键落入相邻子树”的结构损坏。
+
+判定是保守的：
+
+- 只有完整解析且结构正常的子树才参与判定；
+- child 越界、环、重复引用、cell 解析失败、坏页、`max_pages` 截断或任一子树未判定时，对应范围记为 `undetermined`，并产生 `BTREE_KEY_ORDER_INCOMPLETE`，整体状态为 `partial`；绝不因“没发现反例”而推断排序通过；
+- 违约证据包含父页、分隔键、子页及实际 `min/max`。
+
+index b-tree 的排序受 collation、表达式和 record 编码影响，本工具**不核验其 SQL 顺序**，也不会把字节序当作 SQL 顺序；每个 index 根页输出 `BTREE_INDEX_KEY_ORDER_UNVERIFIED`（info）并在 `traversal.root_walks[*].key_order.status` 标记为 `not-applicable`。
+
 ### 3.4 本地 payload 与溢出
 
 设 `U = usable_size`，`P = payload_size`：

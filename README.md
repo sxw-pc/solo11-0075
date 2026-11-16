@@ -115,6 +115,7 @@ HTML 中所有动态文本都经过 HTML 转义，可直接离线打开。
 
 - **F1 文件头**：100 字节头、页大小、usable size、保留区、声明页数、freelist 指针、编码、auto-vacuum 标志、文件长度一致性、WAL 提示。
 - **F2 B 树遍历**：表/索引内部页与叶子页、cell pointer array、cell 数量、右子页、层级、父页、越界、重叠、环和重复引用；坏页不会导致整个审计崩溃。
+- **F2b table 键序**：仅用 rowid 与内部分隔键核验普通表 B-tree 的键域契约（页内递增、分隔键递增、分隔键等于左子树最大 rowid、右侧子树下界），可发现“页都可达、类型正确、无环，但键落入错误子树”的静默损坏；index B-tree 明确标记为未核验 SQL 排序。
 - **F3 空间账本**：页头、cell pointer、cell 内容、空闲区、碎片、保留区；按页类型汇总；确定性 top N。
 - **F4 引用图**：可达页、孤儿页、freelist 冲突、越界引用、重复引用、环引用；每个异常带位置和证据。
 - **F5 溢出页**：payload 本地大小、溢出首页、链长、断链、环、重复页、长度不匹配、前缀证据和“未完成”标记。
@@ -138,6 +139,9 @@ HTML 中所有动态文本都经过 HTML 转义，可直接离线打开。
 | `bad_cell_ptr.db` | 越界 cell pointer |
 | `freelist_cycle.db` | freelist trunk 自环 |
 | `overflow_break.db` | 篡改溢出链 next 指针 |
+| `keyorder.db` | 多层 table B-tree，跨内部 separator 的正/负 rowid 与 collated 索引 |
+| `keyorder_swap.db` | 页链接不变，交换左右叶页 rowid 集合使其越过祖先 separator |
+| `keyorder_separator.db` | 内部页分隔键乱序 |
 
 生成过程不联网、不依赖外部文件；同一环境重复生成内容一致。生成目录不提交大二进制文件。
 
@@ -165,7 +169,7 @@ HTML 中所有动态文本都经过 HTML 转义，可直接离线打开。
 make test
 ```
 
-测试覆盖头部错误、页分类、内部/叶子页、cell pointer 越界与重叠、B 树环/重复/越界、freelist trunk/leaf、溢出链断/环/重复/长度不匹配、schema 根页与旁证不可用、规则级别与证据、JSON/Markdown/HTML、CLI `audit`/`verify`、只读性、确定性、fixture 可重复生成和单文件行数限制。
+测试覆盖头部错误、页分类、内部/叶子页、cell pointer 越界与重叠、B 树环/重复/越界、table 键序（递增、分隔键、跨子树 rowid、64-bit 负值、部分遍历未判定、index 未核验）、freelist trunk/leaf、溢出链断/环/重复/长度不匹配、schema 根页与旁证不可用、规则级别与证据、JSON/Markdown/HTML、CLI `audit`/`verify`、只读性、确定性、fixture 可重复生成和单文件行数限制。
 
 ## 目录结构
 

@@ -45,73 +45,24 @@ def audit_schema(
         if root_page is not None:
             obj.page_type = root_page.page_type
         if obj.root_page == 1:
-            problems.append(
-                _issue("SCHEMA_ROOT_MISSING", 1, "root_page", ">= 2", obj.root_page, f"对象 {obj.name} 不能使用 schema 页作为根")
-            )
+            problems.append(_issue("SCHEMA_ROOT_MISSING", 1, "root_page", ">= 2", obj.root_page, f"对象 {obj.name} 不能使用 schema 页作为根"))
             continue
         if not walk.pages:
-            problems.append(
-                _issue(
-                    "SCHEMA_ROOT_MISSING",
-                    obj.root_page,
-                    "root_page",
-                    f"2..{walker.reader.actual_page_count} 且可达",
-                    obj.root_page,
-                    f"对象 {obj.name} 的根页不可达",
-                )
-            )
+            problems.append(_issue("SCHEMA_ROOT_MISSING", obj.root_page, "root_page", f"2..{walker.reader.actual_page_count} 且可达", obj.root_page, f"对象 {obj.name} 的根页不可达"))
             continue
         walked_roots.add(obj.root_page)
         obj.traversed = True
         if obj.page_type not in allowed:
-            problems.append(
-                _issue(
-                    "SCHEMA_ROOT_TYPE_MISMATCH",
-                    obj.root_page,
-                    "page_type",
-                    sorted(allowed),
-                    obj.page_type,
-                    f"{obj.object_type} 对象 {obj.name} 的根页类型不符",
-                )
-            )
+            problems.append(_issue("SCHEMA_ROOT_TYPE_MISMATCH", obj.root_page, "page_type", sorted(allowed), obj.page_type, f"{obj.object_type} 对象 {obj.name} 的根页类型不符"))
         if walk.reason == "already-visited":
-            problems.append(
-                _issue("SCHEMA_TRAVERSAL_FAILED", obj.root_page, "root_page", "唯一根页", obj.root_page, f"对象 {obj.name} 复用了已遍历根页")
-            )
+            problems.append(_issue("SCHEMA_TRAVERSAL_FAILED", obj.root_page, "root_page", "唯一根页", obj.root_page, f"对象 {obj.name} 复用了已遍历根页"))
         elif not walk.complete:
-            problems.append(
-                _issue(
-                    "SCHEMA_TRAVERSAL_FAILED",
-                    obj.root_page,
-                    "traversal",
-                    "完整遍历",
-                    walk.reason or "incomplete",
-                    f"对象 {obj.name} 的树遍历未完成",
-                )
-            )
+            problems.append(_issue("SCHEMA_TRAVERSAL_FAILED", obj.root_page, "traversal", "完整遍历", walk.reason or "incomplete", f"对象 {obj.name} 的树遍历未完成"))
     if parsed_roots != walked_roots:
-        problems.append(
-            _issue(
-                "SCHEMA_ROOT_DIFF",
-                None,
-                "root_pages",
-                sorted(parsed_roots),
-                sorted(walked_roots),
-                "schema 声明根页与实际成功遍历根页不同",
-            )
-        )
+        problems.append(_issue("SCHEMA_ROOT_DIFF", None, "root_pages", sorted(parsed_roots), sorted(walked_roots), "schema 声明根页与实际成功遍历根页不同"))
     sidecar = probe_sidecar(snapshot_path)
     if not sidecar.available:
-        problems.append(
-            _issue(
-                "SCHEMA_SIDECAR_UNAVAILABLE",
-                None,
-                "sqlite3",
-                "只读旁证可用",
-                sidecar.error or "unknown",
-                "旁证失败不影响主审计结果",
-            )
-        )
+        problems.append(_issue("SCHEMA_SIDECAR_UNAVAILABLE", None, "sqlite3", "只读旁证可用", sidecar.error or "unknown", "旁证失败不影响主审计结果"))
     else:
         problems.extend(_compare_sidecar(header, objects, parsed_roots, sidecar))
     schema_payload = _schema_payload(objects, parsed_roots, walked_roots, root_walks, sidecar)
@@ -124,41 +75,14 @@ def _compare_sidecar(
 ) -> list[Problem]:
     problems: list[Problem] = []
     if sidecar.page_count is not None and sidecar.page_count != header.declared_pages:
-        problems.append(
-            _issue(
-                "SCHEMA_SIDECAR_MISMATCH",
-                None,
-                "page_count",
-                header.declared_pages,
-                sidecar.page_count,
-                "PRAGMA page_count 与文件头声明不同",
-            )
-        )
+        problems.append(_issue("SCHEMA_SIDECAR_MISMATCH", None, "page_count", header.declared_pages, sidecar.page_count, "PRAGMA page_count 与文件头声明不同"))
     sidecar_roots = sidecar.roots()
     if sidecar_roots != parsed_roots:
-        problems.append(
-            _issue(
-                "SCHEMA_ROOT_DIFF",
-                None,
-                "root_pages",
-                sorted(parsed_roots),
-                sorted(sidecar_roots),
-                "解析 schema 记录与只读旁证的根页集合不同",
-            )
-        )
+        problems.append(_issue("SCHEMA_ROOT_DIFF", None, "root_pages", sorted(parsed_roots), sorted(sidecar_roots), "解析 schema 记录与只读旁证的根页集合不同"))
     parsed_keys = {_object_key(item.to_dict()) for item in objects}
     sidecar_keys = {_object_key(item) for item in sidecar.objects}
     if parsed_keys != sidecar_keys:
-        problems.append(
-            _issue(
-                "SCHEMA_OBJECT_MISMATCH",
-                None,
-                "objects",
-                sorted(str(item) for item in parsed_keys),
-                sorted(str(item) for item in sidecar_keys),
-                "解析 schema 对象集合与只读旁证不同",
-            )
-        )
+        problems.append(_issue("SCHEMA_OBJECT_MISMATCH", None, "objects", sorted(str(item) for item in parsed_keys), sorted(str(item) for item in sidecar_keys), "解析 schema 对象集合与只读旁证不同"))
     return problems
 def _schema_payload(
     objects: list[SchemaObject],

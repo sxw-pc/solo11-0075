@@ -120,48 +120,37 @@ def render_html(report: dict[str, Any]) -> str:
     parts.append('<h2>Top 碎片页</h2><div class="panel">')
     frag = report.get("summary", {}).get("top_pages", {}).get("fragmentation", [])
     if frag:
-        parts.append(
-            _table(
-                ["页", "类型", "碎片字节", "碎片率", "cell 数"],
-                [[item.get("page_no"), item.get("page_type"), item.get("fragmented_bytes"), item.get("fragmentation_ratio"), item.get("cell_count")] for item in frag],
-            )
-        )
+        parts.append(_table(["页", "类型", "碎片字节", "碎片率", "cell 数"], [[item.get("page_no"), item.get("page_type"), item.get("fragmented_bytes"), item.get("fragmentation_ratio"), item.get("cell_count")] for item in frag]))
     else:
         parts.append('<p class="empty">无。</p>')
     parts.append("</div>")
     parts.append('<h2>Top 低利用率页</h2><div class="panel">')
     low = report.get("summary", {}).get("top_pages", {}).get("low_utilization", [])
     if low:
-        parts.append(
-            _table(
-                ["页", "类型", "利用率", "cell 字节", "空闲字节"],
-                [[item.get("page_no"), item.get("page_type"), item.get("utilization"), item.get("cell_bytes"), item.get("free_bytes")] for item in low],
-            )
-        )
+        parts.append(_table(["页", "类型", "利用率", "cell 字节", "空闲字节"], [[item.get("page_no"), item.get("page_type"), item.get("utilization"), item.get("cell_bytes"), item.get("free_bytes")] for item in low]))
     else:
         parts.append('<p class="empty">无。</p>')
+    parts.append("</div>")
+    parts.append('<h2>键序核验</h2><div class="panel">')
+    order = report.get("traversal", {}).get("key_order") or {}
+    parts.append(
+        '<p class="small">普通 rowid table b-tree 按有符号 64-bit rowid 核验；'
+        f'已核验根页 {_e(order.get("verified_roots"))}；违约根页 {_e(order.get("violated_roots"))}；'
+        f'未判定根页 {_e(order.get("undetermined_roots"))}。index b-tree 未核验 SQL 排序'
+        '（collation/表达式/record 编码），字节序不代表 SQL 顺序。</p>'
+    )
+    order_rows = [
+        [item.get("root_page"), item.get("expected_kind"), item.get("complete"), (item.get("key_order") or {}).get("status"), (item.get("key_order") or {}).get("checked_pages"), (item.get("key_order") or {}).get("violations"), (item.get("key_order") or {}).get("undetermined_count")]
+        for item in report.get("traversal", {}).get("root_walks", [])
+    ]
+    if order_rows:
+        parts.append(_table(["根页", "类型", "遍历完整", "键序状态", "已核验页", "违约", "未判定"], order_rows))
     parts.append("</div>")
     parts.append('<h2>Schema 对账</h2><div class="panel">')
     objects = report.get("schema", {}).get("objects", [])
     if objects:
-        parts.append(
-            _table(
-                ["类型", "名称", "根页", "已遍历", "页类型", "页数", "cell 数", "深度"],
-                [
-                    [
-                        item.get("object_type"),
-                        item.get("name"),
-                        item.get("root_page"),
-                        item.get("traversed"),
-                        item.get("page_type"),
-                        item.get("page_count"),
-                        item.get("cell_count"),
-                        item.get("depth"),
-                    ]
-                    for item in objects
-                ],
-            )
-        )
+        rows = [[item.get("object_type"), item.get("name"), item.get("root_page"), item.get("traversed"), item.get("page_type"), item.get("page_count"), item.get("cell_count"), item.get("depth")] for item in objects]
+        parts.append(_table(["类型", "名称", "根页", "已遍历", "页类型", "页数", "cell 数", "深度"], rows))
     else:
         parts.append('<p class="empty">没有可核对的表或索引对象。</p>')
     sidecar = report.get("schema", {}).get("sidecar", {})

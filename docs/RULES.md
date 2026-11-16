@@ -7,6 +7,12 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | `AUDIT_PARTIAL_RESULT` | warning | 审计仅覆盖部分页 | 页级覆盖或任一子结构遍历未完成 | reason | 是 | 保留证据并在归档验收单中标注。 |
 | `BTREE_CHILD_OUT_OF_RANGE` | error | 子页号越界 | 子页指针不指向有效页 | parent_page,child_page | 否 | 保留证据并在归档验收单中标注。 |
+| `BTREE_ROWID_ORDER_INVALID` | error | 叶页 rowid 未递增 | 同一 table leaf 的 rowid 未按有符号 64-bit 严格递增 | page,cell_index,rowid | 否 | 保留证据并在归档验收单中标注。 |
+| `BTREE_SEPARATOR_ORDER_INVALID` | error | 内部页分隔键未递增 | 同一 table interior 的分隔键未按有符号 64-bit 严格递增 | page,cell_index,separator | 否 | 保留证据并在归档验收单中标注。 |
+| `BTREE_SEPARATOR_MAX_MISMATCH` | error | 分隔键不等于左子树最大 rowid | table interior 分隔键应等于其左子树的最大 rowid | separator_page,separator,child_page,child_min,child_max | 否 | 保留证据并在归档验收单中标注。 |
+| `BTREE_ROWID_OUT_OF_PARTITION` | error | rowid 落入错误子树 | 子页 rowid 越过祖先分隔键划分的键域 | child_page,separator_page,separator,child_min,child_max | 否 | 保留证据并在归档验收单中标注。 |
+| `BTREE_KEY_ORDER_INCOMPLETE` | warning | 键序核验未判定 | 部分子树、坏页、越界 child 或遍历中断使键序无法完整判定 | root_page,undetermined_count,reason | 是 | 保留证据并在归档验收单中标注。 |
+| `BTREE_INDEX_KEY_ORDER_UNVERIFIED` | info | 索引键序未核验 | index b-tree 排序依赖 collation/表达式，字节序不代表 SQL 顺序 | root_page,note | 否 | 需要索引键序结论时使用 SQLite 自身的完整性检查。 |
 | `BTREE_CYCLE` | error | B 树出现环 | 子页是当前页或其祖先 | parent_page,child_page | 否 | 保留证据并在归档验收单中标注。 |
 | `BTREE_DEPTH_ANOMALY` | warning | B 树深度异常 | 深度超过配置上限或同层异常 | page,depth | 否 | 保留证据并在归档验收单中标注。 |
 | `BTREE_DUPLICATE_REFERENCE` | error | B 树页被重复引用 | 同一页从多个父引用到达 | parent_page,child_page,previous_parent | 否 | 保留证据并在归档验收单中标注。 |

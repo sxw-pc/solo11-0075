@@ -4,7 +4,6 @@
 The script uses only the Python standard library and never touches the network.
 Every database name, schema name and payload is synthetic.
 """
-
 from __future__ import annotations
 
 import argparse
@@ -13,7 +12,7 @@ import json
 import shutil
 import sqlite3
 from pathlib import Path
-
+from keyorder_fixtures import build_keyorder
 PAGE_SIZE = 1024
 FIXTURES = (
     "clean.db",
@@ -24,8 +23,8 @@ FIXTURES = (
     "bad_cell_ptr.db",
     "freelist_cycle.db",
     "overflow_break.db",
+    "keyorder.db", "keyorder_swap.db", "keyorder_separator.db",
 )
-
 def filler(seed: int, length: int) -> str:
     unit = f"record-{seed:05d}-synthetic;"
     return (unit * ((length // len(unit)) + 1))[:length]
@@ -269,6 +268,7 @@ def build(out_dir: Path) -> list[Path]:
     corrupt_cell_pointer(created["clean.db"], created["bad_cell_ptr.db"])
     corrupt_freelist_cycle(created["freelist.db"], created["freelist_cycle.db"])
     corrupt_overflow(created["overflow.db"], created["overflow_break.db"])
+    build_keyorder(out_dir)
     manifest = []
     for name in FIXTURES:
         data = created[name].read_bytes()

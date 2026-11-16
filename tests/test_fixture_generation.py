@@ -14,6 +14,9 @@ EXPECTED = {
     "bad_cell_ptr.db",
     "freelist_cycle.db",
     "overflow_break.db",
+    "keyorder.db",
+    "keyorder_swap.db",
+    "keyorder_separator.db",
 }
 def _hashes(directory: Path) -> dict[str, str]:
     return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in directory.glob("*.db")}

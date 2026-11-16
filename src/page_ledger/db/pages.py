@@ -52,6 +52,7 @@ class CellParse:
     local_size: int = 0
     payload_offset: int = 0
     rowid: int | None = None
+    separator: int | None = None
     child_page: int | None = None
     overflow_page: int | None = None
     overflow_bytes: int = 0
@@ -70,6 +71,10 @@ def decode_varint(data: bytes, offset: int, end: int) -> tuple[int, int]:
         if not byte & 0x80:
             return value, index + 1
     raise ValueError("varint 过长")
+def varint_to_signed(value: int) -> int:
+    """Interpret a rowid/separator varint with SQLite's signed 64-bit semantics."""
+    value &= 0xFFFF_FFFF_FFFF_FFFF
+    return value - 0x1_0000_0000_0000_0000 if value >= 0x8000_0000_0000_0000 else value
 def local_payload_size(payload: int, usable: int, index_btree: bool) -> int:
     if payload < 0 or usable < 480:
         raise ValueError("payload 或 usable size 非法")
@@ -190,7 +195,8 @@ def parse_cell(data: bytes, page: PageParse, index: int, usable: int) -> CellPar
             if pointer + 5 > page.usable_end:
                 raise ValueError("table interior cell 过短")
             cell.child_page = be_u32(data, pointer)
-            _, used = decode_varint(data, pointer + 4, page.usable_end)
+            separator, used = decode_varint(data, pointer + 4, page.usable_end)
+            cell.separator = varint_to_signed(separator)
             cell.cell_size = 4 + used
         elif kind == "table_leaf":
             payload, used = decode_varint(data, pointer, page.usable_end)
@@ -205,7 +211,7 @@ def parse_cell(data: bytes, page: PageParse, index: int, usable: int) -> CellPar
             cell.local_size = local
             cell.payload_offset = payload_offset
             cell.overflow_bytes = payload - local
-            cell.rowid = rowid
+            cell.rowid = varint_to_signed(rowid)
             if overflow:
                 cell.overflow_page = be_u32(data, payload_offset + local)
             cell.cell_size = cell_end - pointer

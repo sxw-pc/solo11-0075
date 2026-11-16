@@ -31,6 +31,9 @@ def fixture_paths(fixtures_dir: Path) -> dict[str, Path]:
         "bad_cell_ptr",
         "freelist_cycle",
         "overflow_break",
+        "keyorder",
+        "keyorder_swap",
+        "keyorder_separator",
     )
     return {name: fixtures_dir / f"{name}.db" for name in names}
 @pytest.fixture

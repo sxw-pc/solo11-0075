@@ -20,7 +20,9 @@
 ## 3. 不是完整性检查替代品
 
 - 不执行 SQLite `PRAGMA integrity_check` / `quick_check`。
-- 不验证 B 树键顺序、rowid 排序、索引项唯一性、索引与表的一致性、外键、CHECK 约束或触发器语义。
+- 只对普通 rowid table b-tree 核验键序：叶页 rowid 递增、内部分隔键递增、分隔键等于左子树最大 rowid、右侧子树下界严格大于分隔键；index b-tree 的 SQL 排序受 collation/表达式/record 编码影响，不核验，字节序不代表 SQL 顺序。
+- 键序结论是保守的：child 越界、环、重复引用、cell 解析失败、坏页或 `max_pages` 截断时，未覆盖范围只记为“未判定”，不会推断排序通过，整体状态为 `partial`。
+- 不验证索引项唯一性、索引与表的一致性、外键、CHECK 约束或触发器语义。
 - 不验证 cell 中记录的 SQL 文本是否可编译、schema 对象内容是否互相一致。
 - 不检查普通表记录内部 serial type 的语义、字段值范围、文本合法性或业务约束。
 - 不检查 freelist 页中的旧内容，也不检查 secure-delete 是否生效。

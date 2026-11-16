@@ -129,57 +129,19 @@ def summarize_pages(records: list[PageRecord]) -> dict[str, object]:
         "fragmented_bytes": sum(item["fragmented_bytes"] for item in buckets.values()),
         "reserved_bytes": sum(item["reserved_bytes"] for item in buckets.values()),
     }
-    return {
-        "by_page_type": by_type,
-        "by_role": {key: roles[key] for key in sorted(roles)},
-        "totals": totals,
-    }
+    return {"by_page_type": by_type, "by_role": {key: roles[key] for key in sorted(roles)}, "totals": totals}
 def space_findings(records: list[PageRecord], config: AuditConfig) -> tuple[list[Problem], dict[str, object]]:
     problems: list[Problem] = []
     for record in records:
         used = record.header_bytes + record.pointer_bytes + record.cell_bytes
         if used > record.usable_size or record.fragmented_bytes > record.usable_size:
-            problems.append(
-                Problem(
-                    "SPACE_LEDGER_INCONSISTENT",
-                    page=record.page_no,
-                    field="used_bytes",
-                    expected=f"<= {record.usable_size}",
-                    actual=used,
-                    evidence=f"fragmented={record.fragmented_bytes}, type={record.page_type}",
-                )
-            )
+            problems.append(Problem("SPACE_LEDGER_INCONSISTENT", page=record.page_no, field="used_bytes", expected=f"<= {record.usable_size}", actual=used, evidence=f"fragmented={record.fragmented_bytes}, type={record.page_type}"))
         if record.role not in {"schema", "table", "index", "btree"} or record.page_no == 1:
             continue
         if record.fragmented_bytes and record.fragmentation_ratio > config.fragmentation_warn_ratio:
-            problems.append(
-                Problem(
-                    "SPACE_FRAGMENTATION_HIGH",
-                    page=record.page_no,
-                    field="fragmented_bytes",
-                    expected=f"ratio <= {config.fragmentation_warn_ratio}",
-                    actual=f"{record.fragmented_bytes}/{record.usable_size} ({record.fragmentation_ratio})",
-                    evidence=f"页 {record.page_no} 碎片率超过阈值",
-                )
-            )
+            problems.append(Problem("SPACE_FRAGMENTATION_HIGH", page=record.page_no, field="fragmented_bytes", expected=f"ratio <= {config.fragmentation_warn_ratio}", actual=f"{record.fragmented_bytes}/{record.usable_size} ({record.fragmentation_ratio})", evidence=f"页 {record.page_no} 碎片率超过阈值"))
         if record.cell_count >= config.low_util_min_cells and record.utilization < config.utilization_low_ratio:
-            problems.append(
-                Problem(
-                    "SPACE_UTILIZATION_LOW",
-                    page=record.page_no,
-                    field="utilization",
-                    expected=f">= {config.utilization_low_ratio}",
-                    actual=record.utilization,
-                    evidence=f"页 {record.page_no} 已用空间占比过低",
-                )
-            )
-    btree = [
-        record
-        for record in records
-        if record.role in {"schema", "table", "index", "btree"} and record.page_no != 1
-    ]
-    tops = {
-        "fragmentation": [item.to_dict() for item in top_by(btree, "fragmentation_ratio", config.top_pages, True)],
-        "low_utilization": [item.to_dict() for item in top_by(btree, "utilization", config.top_pages, False)],
-    }
+            problems.append(Problem("SPACE_UTILIZATION_LOW", page=record.page_no, field="utilization", expected=f">= {config.utilization_low_ratio}", actual=record.utilization, evidence=f"页 {record.page_no} 已用空间占比过低"))
+    btree = [record for record in records if record.role in {"schema", "table", "index", "btree"} and record.page_no != 1]
+    tops = {"fragmentation": [item.to_dict() for item in top_by(btree, "fragmentation_ratio", config.top_pages, True)], "low_utilization": [item.to_dict() for item in top_by(btree, "utilization", config.top_pages, False)]}
     return problems, tops

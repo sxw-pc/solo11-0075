@@ -9,6 +9,7 @@ from typing import Any
 from ..audit.model import Problem
 from ..config import AuditConfig
 from ..io.reader import PageReader
+from .keyorder import KeyOrderState
 from .overflow import OverflowAuditor
 from .pages import (
     CellParse,
@@ -47,6 +48,7 @@ class RootWalk:
     max_depth: int = 0
     complete: bool = False
     reason: str = ""
+    key_order: KeyOrderState | None = None
     def to_dict(self) -> dict[str, Any]:
         return {
             "root_page": self.root_page,
@@ -58,6 +60,7 @@ class RootWalk:
             "max_depth": self.max_depth,
             "complete": self.complete,
             "reason": self.reason,
+            "key_order": self.key_order.payload if self.key_order else None,
         }
 class BtreeWalker:
     def __init__(self, reader: PageReader, header, config: AuditConfig, overflow: OverflowAuditor):
@@ -84,7 +87,7 @@ class BtreeWalker:
             seen.add(current)
             current = self.parents.get(current)
         return False
-    def _queue_child(self, current: int, child: int, depth: int, expected: str, queue: deque) -> None:
+    def _queue_child(self, current: int, child: int, depth: int, expected: str, queue: deque) -> bool:
         if child < 1 or child > self.reader.actual_page_count:
             self._issue(
                 "BTREE_CHILD_OUT_OF_RANGE",
@@ -94,10 +97,10 @@ class BtreeWalker:
                 child,
                 f"页 {current} 引用越界子页",
             )
-            return
+            return False
         if child == current or self._is_ancestor(child, current):
             self._issue("BTREE_CYCLE", current, "child_page", "无环", child, f"页 {current} 引用祖先页")
-            return
+            return False
         if child in self.visited or child in self.queued:
             previous = self.parents.get(child)
             self._issue(
@@ -108,10 +111,11 @@ class BtreeWalker:
                 child,
                 f"页 {child} 已被页 {previous} 引用",
             )
-            return
+            return False
         self.queued.add(child)
         self.parents[child] = current
         queue.append((child, current, depth, expected))
+        return True
     def _schema_payload(self, page_no: int, cell: CellParse) -> bytes:
         page = self.reader.page(page_no)
         if page is None:
@@ -145,12 +149,17 @@ class BtreeWalker:
         collect_schema: bool = False,
     ) -> RootWalk:
         result = RootWalk(root_page=root_page, role=role, expected_kind=expected_kind)
+        key_order = KeyOrderState(root_page=root_page, expected=expected_kind)
+        result.key_order = key_order
         if root_page < 1 or root_page > self.reader.actual_page_count:
             result.reason = "root-out-of-range"
+            self._finish_key_order(key_order, result)
             return result
         if root_page in self.visited:
             result.pages = sorted(page for page, value in self.pages.items() if self.parents.get(page) is None)
             result.reason = "already-visited"
+            key_order.undecided(root_page, None, None, "already-visited")
+            self._finish_key_order(key_order, result)
             return result
         queue: deque[tuple[int, int | None, int, str]] = deque([(root_page, None, 0, expected_kind)])
         self.queued.add(root_page)
@@ -159,6 +168,7 @@ class BtreeWalker:
             page_no, parent, depth, expected = queue.popleft()
             self.queued.discard(page_no)
             if page_no in self.visited:
+                key_order.undecided(page_no, None, None, "already-visited")
                 continue
             if len(self.visited) >= self.config.max_pages:
                 if not self._limit_reported:
@@ -172,6 +182,9 @@ class BtreeWalker:
                     )
                     self._limit_reported = True
                 result.reason = "page-limit"
+                key_order.undecided(page_no, None, None, "page-limit")
+                for stale, _, _, _ in queue:
+                    key_order.undecided(stale, None, None, "page-limit")
                 break
             self.visited.add(page_no)
             self.parents[page_no] = parent
@@ -198,8 +211,8 @@ class BtreeWalker:
             existing_problems = len(page.problems)
             self.problems.extend(page.problems)
             if not page.is_btree:
-                if page_no == root_page:
-                    result.reason = "non-btree-root"
+                result.reason = "non-btree-root"
+                key_order.undecided(page_no, None, None, f"page-not-btree:{page.page_type}")
                 continue
             allowed = TABLE_TYPES if expected == "table" else INDEX_TYPES
             if page.page_type not in allowed:
@@ -218,8 +231,6 @@ class BtreeWalker:
                 if cell.problems:
                     continue
                 result.cell_count += 1
-                if cell.child_page:
-                    self._queue_child(page_no, cell.child_page, depth + 1, expected, queue)
                 if collect_schema and page.page_type == "table_leaf":
                     payload = self._schema_payload(page_no, cell)
                     self.schema_records.append((page_no, index, payload))
@@ -227,10 +238,17 @@ class BtreeWalker:
                     self._handle_overflow(page_no, cell)
             check_cell_overlaps(page, tree_page.cells)
             self.problems.extend(page.problems[existing_problems:])
-            if page.right_child:
-                self._queue_child(page_no, page.right_child, depth + 1, expected, queue)
+            page_broken = bool(page.problems)
+            children = key_order.inspect(page, tree_page.cells, depth, page_broken)
+            for child in children:
+                if not self._queue_child(page_no, child, depth + 1, expected, queue):
+                    key_order.reject(page_no, child)
         result.complete = not queue and result.reason not in {"page-limit", "non-btree-root"}
         if not result.complete and not result.reason:
             result.reason = "interrupted"
+        self._finish_key_order(key_order, result)
         self.roots.append(result)
         return result
+    def _finish_key_order(self, key_order: KeyOrderState, result: RootWalk) -> None:
+        key_order.finish(result.complete, result.reason)
+        self.problems.extend(key_order.problems)

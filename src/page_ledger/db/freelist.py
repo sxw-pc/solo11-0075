@@ -6,21 +6,10 @@ from ..audit.model import FreelistResult, Problem
 from ..io.reader import PageReader, be_u32
 
 
-def _issue(
-    result: FreelistResult,
-    code: str,
-    page: int | None,
-    field: str,
-    expected: object,
-    actual: object,
-    evidence: str,
-) -> None:
+def _issue(result: FreelistResult, code: str, page: int | None, field: str, expected: object, actual: object, evidence: str) -> None:
     result.problems.append(Problem(code, page=page, field=field, expected=expected, actual=actual, evidence=evidence))
 def audit_freelist(reader: PageReader, header) -> FreelistResult:
-    result = FreelistResult(
-        first_trunk=header.first_freelist_trunk,
-        declared_count=header.freelist_pages,
-    )
+    result = FreelistResult(first_trunk=header.first_freelist_trunk, declared_count=header.freelist_pages)
     first = header.first_freelist_trunk
     declared = header.freelist_pages
     if declared and not first:
@@ -59,15 +48,7 @@ def audit_freelist(reader: PageReader, header) -> FreelistResult:
         next_trunk = be_u32(page, 0)
         leaf_count = be_u32(page, 4)
         if 8 + leaf_count * 4 > header.usable_size:
-            _issue(
-                result,
-                "FREE_TRUNK_HEADER_INVALID",
-                current,
-                "leaf_count",
-                f"<= {(header.usable_size - 8) // 4}",
-                leaf_count,
-                "trunk 叶子计数无法放入页内",
-            )
+            _issue(result, "FREE_TRUNK_HEADER_INVALID", current, "leaf_count", f"<= {(header.usable_size - 8) // 4}", leaf_count, "trunk 叶子计数无法放入页内")
             result.completed = False
             break
         trunks.add(current)
@@ -85,21 +66,11 @@ def audit_freelist(reader: PageReader, header) -> FreelistResult:
                 _issue(result, "FREE_LEAF_DUPLICATE", current, f"leaf[{index}]", "唯一", leaf, "同一叶子页被多个 trunk 登记")
                 continue
             leaves.add(leaf)
-        result.trunk_links.append(
-            {"trunk_page": current, "next_trunk": next_trunk, "leaf_count": leaf_count, "leaves": leaf_values}
-        )
+        result.trunk_links.append({"trunk_page": current, "next_trunk": next_trunk, "leaf_count": leaf_count, "leaves": leaf_values})
         current = next_trunk
     result.trunk_pages = sorted(trunks)
     result.leaf_pages = sorted(leaves)
     result.free_pages = sorted(trunks | leaves)
     if len(result.free_pages) != declared:
-        _issue(
-            result,
-            "FREE_COUNT_MISMATCH",
-            None,
-            "freelist_pages",
-            declared,
-            len(result.free_pages),
-            "头部声明 freelist 页数与实际唯一页数不同",
-        )
+        _issue(result, "FREE_COUNT_MISMATCH", None, "freelist_pages", declared, len(result.free_pages), "头部声明 freelist 页数与实际唯一页数不同")
     return result

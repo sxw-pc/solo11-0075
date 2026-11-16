@@ -45,22 +45,7 @@ def overflow_payload(overflow: OverflowAuditor) -> dict[str, Any]:
         "incomplete_chains": sum(1 for item in chains if not item["complete"]),
         "first_pages": sorted({item["first_page"] for item in chains}),
     }
-def build_report(
-    config: AuditConfig,
-    snapshot: FileSnapshot,
-    header,
-    problems: list[Problem],
-    pages: list[dict[str, Any]],
-    traversal: dict[str, Any],
-    freelist: dict[str, Any],
-    overflow: dict[str, Any],
-    schema: dict[str, Any],
-    limitations: list[str],
-    partial: bool,
-    page_summary: dict[str, Any] | None = None,
-    top_pages: dict[str, Any] | None = None,
-    file_summary: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+def build_report(config: AuditConfig, snapshot: FileSnapshot, header, problems: list[Problem], pages: list[dict[str, Any]], traversal: dict[str, Any], freelist: dict[str, Any], overflow: dict[str, Any], schema: dict[str, Any], limitations: list[str], partial: bool, page_summary: dict[str, Any] | None = None, top_pages: dict[str, Any] | None = None, file_summary: dict[str, Any] | None = None) -> dict[str, Any]:
     findings = build_findings(problems, config.max_findings_per_code)
     if not config.include_info_findings:
         findings = [item for item in findings if item.level != "info"]
